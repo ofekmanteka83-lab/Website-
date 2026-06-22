@@ -1,0 +1,27 @@
+{
+  "name": "everose-day-date",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "predev": "node scripts/generate-frames.mjs",
+    "dev": "next dev",
+    "prebuild": "node scripts/generate-frames.mjs",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "frames": "node scripts/generate-frames.mjs --force"
+  },
+  "dependencies": {
+    "framer-motion": "^11.5.4",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "sharp": "^0.35.2",
+    "typescript": "^5.7.2"
+  }
+}

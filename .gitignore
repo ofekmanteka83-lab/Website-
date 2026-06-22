@@ -1,0 +1,15 @@
+/node_modules
+/.next
+/out
+/build
+.DS_Store
+*.pem
+npm-debug.log*
+.env*
+next-env.d.ts
+
+# Generated / large media — frames are produced by scripts/generate-frames.mjs
+# (placeholders) or scripts/extract-frames.sh (real Higgsfield video).
+/frames
+/public/frames
+/public/hero.mp4
