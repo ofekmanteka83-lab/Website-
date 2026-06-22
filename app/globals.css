@@ -17,6 +17,35 @@ body {
   font-family: var(--font-inter), system-ui, sans-serif;
 }
 
+/* Hero legibility scrim. Mobile: bottom only. Desktop: directional vignette
+   (dark lower-left where the headline sits, clearing toward the watch). */
+.hero-scrim {
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.92) 0%,
+    rgba(0, 0, 0, 0.4) 46%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
+@media (min-width: 768px) {
+  .hero-scrim {
+    background:
+      linear-gradient(
+        to right,
+        rgba(0, 0, 0, 0.82) 0%,
+        rgba(0, 0, 0, 0.45) 32%,
+        rgba(0, 0, 0, 0) 62%
+      ),
+      linear-gradient(
+        to top,
+        rgba(0, 0, 0, 0.78) 0%,
+        rgba(0, 0, 0, 0.2) 50%,
+        rgba(0, 0, 0, 0) 86%
+      );
+  }
+}
+
 /* Stack the specs table into a single column on small screens. */
 @media (max-width: 600px) {
   .spec-row {

@@ -143,8 +143,8 @@ export default function ScrollHero() {
         const progress = scrollable > 0 ? clamp(-top / scrollable, 0, 1) : 0;
 
         if (displayed < 0) displayed = progress;
-        displayed += (progress - displayed) * 0.1;
-        if (Math.abs(progress - displayed) < 0.0006) displayed = progress;
+        displayed += (progress - displayed) * 0.085; // smoother cinematic glide
+        if (Math.abs(progress - displayed) < 0.0005) displayed = progress;
 
         const target = Math.round(displayed * (frameCount - 1));
         if (target !== currentIdx && isReady(images[target])) draw(target);
@@ -209,16 +209,15 @@ export default function ScrollHero() {
           style={{ display: "block", width: "100%", height: "100%" }}
         />
 
-        {/* Gradient + overlay content */}
+        {/* Directional legibility scrim (see .hero-scrim in globals.css). */}
         <div
+          className="hero-scrim"
           style={{
             position: "absolute",
             inset: 0,
             display: "flex",
             flexDirection: "column",
             justifyContent: "flex-end",
-            background:
-              "linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.45) 42%, rgba(0,0,0,0) 100%)",
             pointerEvents: "none",
           }}
         >
