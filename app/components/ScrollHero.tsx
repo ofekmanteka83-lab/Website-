@@ -77,16 +77,27 @@ export default function ScrollHero() {
         const iw = img.naturalWidth;
         const ih = img.naturalHeight;
         const canvasAspect = cw / ch;
-        const imgAspect = iw / ih;
-        const scale =
-          canvasAspect < imgAspect
-            ? Math.min(cw / iw, ch / ih) // narrower than the frame → contain
-            : Math.max(cw / iw, ch / ih); // wider/equal → cover
 
-        const dw = iw * scale;
-        const dh = ih * scale;
-        const dx = (cw - dw) / 2;
-        const dy = (ch - dh) / 2;
+        let dw: number, dh: number, dx: number, dy: number;
+        if (canvasAspect < 1) {
+          // Portrait (mobile): map the FULL frame height into the upper region
+          // and crop only the empty black sides. The watch sits high and large,
+          // every exploded part stays visible, and the lower area is left clear
+          // for the headline.
+          const topFraction = 0.58;
+          dh = ch * topFraction;
+          const scale = dh / ih;
+          dw = iw * scale;
+          dx = (cw - dw) / 2;
+          dy = ch * 0.05;
+        } else {
+          // Landscape (desktop/tablet): cover, full-bleed.
+          const scale = Math.max(cw / iw, ch / ih);
+          dw = iw * scale;
+          dh = ih * scale;
+          dx = (cw - dw) / 2;
+          dy = (ch - dh) / 2;
+        }
 
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
@@ -223,7 +234,7 @@ export default function ScrollHero() {
             {/* Phased headline — crossfades as the watch deconstructs. */}
             <div
               style={{
-                minHeight: "clamp(11rem, 26vh, 15rem)",
+                minHeight: "clamp(9rem, 20vh, 14rem)",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "flex-end",
