@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { tokens, labelStyle, FRAME_COUNT } from "../tokens";
 
 const framePath = (i: number) =>
@@ -9,9 +9,33 @@ const framePath = (i: number) =>
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
+// Headline copy keyed to the scroll stage: assembled → deconstructing → exploded.
+const phases = [
+  {
+    label: "Est. 1905 · Geneva",
+    title: "Day-Date 40",
+    body: "The watch worn by those who shape the world — cast entirely in 18 ct Everose gold, forged in our own foundry.",
+  },
+  {
+    label: "Anatomy of a Legend",
+    title: "Engineered to the core.",
+    body: "Beneath the chocolate dial turns the Calibre 3255 — a Chronergy escapement and seventy hours of autonomy, set in motion by the wrist alone.",
+  },
+  {
+    label: "Exploded · Calibre 3255",
+    title: "Every part, perfected.",
+    body: "Hundreds of components, each finished by hand, suspended in perfect equilibrium. This is mastery, taken apart.",
+  },
+];
+
+const phaseFor = (p: number) => (p < 0.45 ? 0 : p < 0.8 ? 1 : 2);
+
 export default function ScrollHero() {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const [phase, setPhase] = useState(0);
+  const [atStart, setAtStart] = useState(true);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -24,8 +48,9 @@ export default function ScrollHero() {
     let rafId = 0;
     let cancelled = false;
     let cleanupResize = () => {};
+    let lastPhase = 0;
+    let lastAtStart = true;
 
-    // Wire up the scrub once we know how many frames there are.
     const run = (frameCount: number) => {
       if (cancelled) return;
 
@@ -83,7 +108,6 @@ export default function ScrollHero() {
 
       sizeCanvas();
 
-      // Preload all frames. Draw frame 0 as soon as it lands.
       let firstDrawn = false;
       for (let i = 0; i < frameCount; i++) {
         const img = new Image();
@@ -100,23 +124,32 @@ export default function ScrollHero() {
         }
       }
 
-      // rAF loop — no scroll event listener. A smoothed (eased) value trails the
-      // raw scroll progress for a weighted, cinematic scrub.
+      // rAF loop — no scroll event listener. Eased value trails raw progress.
       let displayed = -1;
       const tick = () => {
         const top = container.getBoundingClientRect().top;
         const scrollable = container.offsetHeight - window.innerHeight;
-        const progress =
-          scrollable > 0 ? clamp(-top / scrollable, 0, 1) : 0;
+        const progress = scrollable > 0 ? clamp(-top / scrollable, 0, 1) : 0;
 
-        if (displayed < 0) displayed = progress; // initialise without a jump
-        displayed += (progress - displayed) * 0.1; // momentum / easing
+        if (displayed < 0) displayed = progress;
+        displayed += (progress - displayed) * 0.1;
         if (Math.abs(progress - displayed) < 0.0006) displayed = progress;
 
         const target = Math.round(displayed * (frameCount - 1));
-        if (target !== currentIdx && isReady(images[target])) {
-          draw(target);
+        if (target !== currentIdx && isReady(images[target])) draw(target);
+
+        // Surface stage + scroll-hint visibility to React only on change.
+        const nextPhase = phaseFor(progress);
+        if (nextPhase !== lastPhase) {
+          lastPhase = nextPhase;
+          setPhase(nextPhase);
         }
+        const nextAtStart = progress < 0.02;
+        if (nextAtStart !== lastAtStart) {
+          lastAtStart = nextAtStart;
+          setAtStart(nextAtStart);
+        }
+
         rafId = requestAnimationFrame(tick);
       };
       rafId = requestAnimationFrame(tick);
@@ -134,7 +167,6 @@ export default function ScrollHero() {
       };
     };
 
-    // Frame count comes from the build-time manifest; fall back to the constant.
     fetch("/frames/manifest.json")
       .then((r) => (r.ok ? r.json() : null))
       .then((m) => run(m && m.count ? m.count : FRAME_COUNT))
@@ -147,14 +179,7 @@ export default function ScrollHero() {
     };
   }, []);
 
-  const fade = {
-    hidden: { opacity: 0, y: 16 },
-    show: (i: number) => ({
-      opacity: 1,
-      y: 0,
-      transition: { delay: 0.8 + i * 0.15, duration: 0.8, ease: "easeOut" },
-    }),
-  } as const;
+  const active = phases[phase];
 
   return (
     <div ref={containerRef} style={{ height: "400vh", position: "relative" }}>
@@ -189,65 +214,68 @@ export default function ScrollHero() {
           <div
             style={{
               padding: "clamp(1.5rem, 5vw, 4.5rem)",
-              paddingBottom: "max(clamp(1.5rem, 5vw, 4.5rem), env(safe-area-inset-bottom))",
+              paddingBottom:
+                "max(clamp(1.5rem, 5vw, 4.5rem), env(safe-area-inset-bottom))",
               width: "100%",
               maxWidth: 760,
             }}
           >
-            <motion.p
-              custom={0}
-              variants={fade}
-              initial="hidden"
-              animate="show"
-              style={{ ...labelStyle, marginBottom: "1.25rem" }}
-            >
-              Est. 1905 · Geneva
-            </motion.p>
-
-            <motion.h1
-              custom={1}
-              variants={fade}
-              initial="hidden"
-              animate="show"
+            {/* Phased headline — crossfades as the watch deconstructs. */}
+            <div
               style={{
-                fontFamily: tokens.fontDisplay,
-                fontWeight: 400,
-                fontSize: "clamp(2.4rem, 6vw, 5.5rem)",
-                lineHeight: 1.05,
-                color: tokens.textPrimary,
-                marginBottom: "1.25rem",
+                minHeight: "clamp(11rem, 26vh, 15rem)",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "flex-end",
               }}
             >
-              Day-Date 40
-            </motion.h1>
-
-            <motion.p
-              custom={2}
-              variants={fade}
-              initial="hidden"
-              animate="show"
-              style={{
-                fontFamily: tokens.fontBody,
-                fontWeight: 300,
-                fontSize: "clamp(0.95rem, 2.6vw, 1.05rem)",
-                lineHeight: 1.6,
-                color: tokens.textBody,
-                maxWidth: 460,
-                marginBottom: "2rem",
-              }}
-            >
-              The watch worn by those who shape the world — cast entirely in 18 ct
-              Everose gold, forged in our own foundry.
-            </motion.p>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={phase}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  transition={{ duration: 0.6, ease: [0.25, 0, 0, 1] }}
+                >
+                  <p style={{ ...labelStyle, marginBottom: "1.25rem" }}>
+                    {active.label}
+                  </p>
+                  <h1
+                    style={{
+                      fontFamily: tokens.fontDisplay,
+                      fontWeight: 400,
+                      fontSize: "clamp(2.4rem, 6vw, 5.5rem)",
+                      lineHeight: 1.05,
+                      color: tokens.textPrimary,
+                      marginBottom: "1.25rem",
+                    }}
+                  >
+                    {active.title}
+                  </h1>
+                  <p
+                    style={{
+                      fontFamily: tokens.fontBody,
+                      fontWeight: 300,
+                      fontSize: "clamp(0.95rem, 2.6vw, 1.05rem)",
+                      lineHeight: 1.6,
+                      color: tokens.textBody,
+                      maxWidth: 460,
+                    }}
+                  >
+                    {active.body}
+                  </p>
+                </motion.div>
+              </AnimatePresence>
+            </div>
 
             <motion.a
-              custom={3}
-              variants={fade}
-              initial="hidden"
-              animate="show"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1, duration: 0.8, ease: "easeOut" }}
               href="#features"
               style={{
                 display: "inline-block",
+                marginTop: "2rem",
                 background: tokens.accent,
                 color: "#000",
                 fontFamily: tokens.fontBody,
@@ -264,6 +292,51 @@ export default function ScrollHero() {
             </motion.a>
           </div>
         </div>
+
+        {/* Scroll hint — fades out the moment scrolling begins. */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: atStart ? 0.9 : 0 }}
+          transition={{ duration: 0.6, ease: "easeOut", delay: atStart ? 1.4 : 0 }}
+          aria-hidden
+          style={{
+            position: "absolute",
+            bottom: "calc(env(safe-area-inset-bottom) + 1.4rem)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "0.7rem",
+            pointerEvents: "none",
+          }}
+        >
+          <span style={{ ...labelStyle, fontSize: "0.58rem" }}>Scroll</span>
+          <div
+            style={{
+              position: "relative",
+              width: 1,
+              height: 48,
+              background:
+                "linear-gradient(to bottom, rgba(200,169,110,0.55), rgba(200,169,110,0))",
+            }}
+          >
+            <motion.div
+              animate={{ y: [0, 40], opacity: [0, 1, 0] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: "50%",
+                marginLeft: -2,
+                width: 4,
+                height: 4,
+                borderRadius: "50%",
+                background: tokens.accent,
+              }}
+            />
+          </div>
+        </motion.div>
       </div>
     </div>
   );
