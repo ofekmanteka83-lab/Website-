@@ -19,87 +19,103 @@ export default function ScrollHero() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const images: HTMLImageElement[] = new Array(FRAME_COUNT);
-    let currentIdx = -1;
     let rafId = 0;
+    let cancelled = false;
+    let cleanupResize = () => {};
 
-    // Cover-fit draw: fill black, then scale image to cover and center it.
-    const draw = (idx: number) => {
-      const img = images[idx];
-      const dpr = window.devicePixelRatio || 1;
-      const cw = canvas.width / dpr;
-      const ch = canvas.height / dpr;
+    // Wire up the scrub once we know how many frames there are.
+    const run = (frameCount: number) => {
+      if (cancelled) return;
 
-      ctx.fillStyle = "#000";
-      ctx.fillRect(0, 0, cw, ch);
+      const images: HTMLImageElement[] = new Array(frameCount);
+      let currentIdx = -1;
 
-      if (!img || !img.complete || !img.naturalWidth) return;
+      // Cover-fit draw: fill black, then scale image to cover and center it.
+      const draw = (idx: number) => {
+        const img = images[idx];
+        const dpr = window.devicePixelRatio || 1;
+        const cw = canvas.width / dpr;
+        const ch = canvas.height / dpr;
 
-      const iw = img.naturalWidth;
-      const ih = img.naturalHeight;
-      const scale = Math.max(cw / iw, ch / ih);
-      const dw = iw * scale;
-      const dh = ih * scale;
-      const dx = (cw - dw) / 2;
-      const dy = (ch - dh) / 2;
-      ctx.drawImage(img, dx, dy, dw, dh);
-      currentIdx = idx;
-    };
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, cw, ch);
 
-    const sizeCanvas = () => {
-      const dpr = window.devicePixelRatio || 1;
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      canvas.width = Math.round(w * dpr);
-      canvas.height = Math.round(h * dpr);
-      canvas.style.width = `${w}px`;
-      canvas.style.height = `${h}px`;
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.scale(dpr, dpr);
-    };
+        if (!img || !img.complete || !img.naturalWidth) return;
 
-    sizeCanvas();
+        const iw = img.naturalWidth;
+        const ih = img.naturalHeight;
+        const scale = Math.max(cw / iw, ch / ih);
+        const dw = iw * scale;
+        const dh = ih * scale;
+        const dx = (cw - dw) / 2;
+        const dy = (ch - dh) / 2;
+        ctx.drawImage(img, dx, dy, dw, dh);
+        currentIdx = idx;
+      };
 
-    // Preload all frames. Draw frame 0 as soon as it lands.
-    let firstDrawn = false;
-    for (let i = 0; i < FRAME_COUNT; i++) {
-      const img = new Image();
-      img.src = framePath(i);
-      images[i] = img;
-      if (i === 0) {
-        img.onload = () => {
-          if (!firstDrawn) {
-            firstDrawn = true;
-            draw(0);
-          }
-        };
-      }
-    }
+      const sizeCanvas = () => {
+        const dpr = window.devicePixelRatio || 1;
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+        canvas.style.width = `${w}px`;
+        canvas.style.height = `${h}px`;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr, dpr);
+      };
 
-    // rAF loop — no scroll event listener.
-    const tick = () => {
-      const top = container.getBoundingClientRect().top;
-      const scrollable = container.offsetHeight - window.innerHeight;
-      const progress =
-        scrollable > 0 ? Math.max(0, Math.min(1, -top / scrollable)) : 0;
-      const target = Math.round(progress * (FRAME_COUNT - 1));
-      if (target !== currentIdx && images[target]) {
-        draw(target);
-      }
-      rafId = requestAnimationFrame(tick);
-    };
-    rafId = requestAnimationFrame(tick);
-
-    const onResize = () => {
       sizeCanvas();
-      if (currentIdx >= 0) draw(currentIdx);
-      else if (firstDrawn) draw(0);
+
+      // Preload all frames. Draw frame 0 as soon as it lands.
+      let firstDrawn = false;
+      for (let i = 0; i < frameCount; i++) {
+        const img = new Image();
+        img.src = framePath(i);
+        images[i] = img;
+        if (i === 0) {
+          img.onload = () => {
+            if (!firstDrawn) {
+              firstDrawn = true;
+              draw(0);
+            }
+          };
+        }
+      }
+
+      // rAF loop — no scroll event listener.
+      const tick = () => {
+        const top = container.getBoundingClientRect().top;
+        const scrollable = container.offsetHeight - window.innerHeight;
+        const progress =
+          scrollable > 0 ? Math.max(0, Math.min(1, -top / scrollable)) : 0;
+        const target = Math.round(progress * (frameCount - 1));
+        if (target !== currentIdx && images[target]) {
+          draw(target);
+        }
+        rafId = requestAnimationFrame(tick);
+      };
+      rafId = requestAnimationFrame(tick);
+
+      const onResize = () => {
+        sizeCanvas();
+        if (currentIdx >= 0) draw(currentIdx);
+        else if (firstDrawn) draw(0);
+      };
+      window.addEventListener("resize", onResize);
+      cleanupResize = () => window.removeEventListener("resize", onResize);
     };
-    window.addEventListener("resize", onResize);
+
+    // Frame count comes from the build-time manifest; fall back to the constant.
+    fetch("/frames/manifest.json")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((m) => run(m && m.count ? m.count : FRAME_COUNT))
+      .catch(() => run(FRAME_COUNT));
 
     return () => {
+      cancelled = true;
       cancelAnimationFrame(rafId);
-      window.removeEventListener("resize", onResize);
+      cleanupResize();
     };
   }, []);
 

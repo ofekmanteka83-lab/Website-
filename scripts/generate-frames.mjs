@@ -10,8 +10,9 @@
 // Requires: sharp (npm i -D sharp)
 
 import sharp from "sharp";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const W = 1600;
 const H = 900;
@@ -184,8 +185,7 @@ function frameSVG(i) {
   </svg>`;
 }
 
-async function main() {
-  const force = process.argv.includes("--force");
+export async function generatePlaceholders({ force = false } = {}) {
   // If frames already exist (e.g. real Higgsfield frames from extract-frames.sh,
   // or a previous run), don't clobber them. Use `npm run frames` to force.
   if (!force && existsSync("public/frames/frame_0001.jpg")) {
@@ -204,11 +204,21 @@ async function main() {
     const name = `public/frames/frame_${String(i + 1).padStart(4, "0")}.jpg`;
     await sharp(Buffer.from(svg)).jpeg({ quality: 86 }).toFile(name);
   }
+  // Manifest lets the client learn the frame count at runtime (decoupled from
+  // any hard-coded constant), so placeholder vs real-video counts both work.
+  await writeFile(
+    "public/frames/manifest.json",
+    JSON.stringify({ count: COUNT })
+  );
   console.log(`Generated ${COUNT} placeholder frames in public/frames/`);
-  console.log(`Make sure FRAME_COUNT = ${COUNT} in app/tokens.ts`);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+// Run directly: `node scripts/generate-frames.mjs [--force]`
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  generatePlaceholders({ force: process.argv.includes("--force") }).catch(
+    (e) => {
+      console.error(e);
+      process.exit(1);
+    }
+  );
+}

@@ -19,20 +19,27 @@ git-ignored (they're generated, and large) — see below to swap in a real video
 
 ## The hero frames
 
-The hero canvas reads JPEG frames from `public/frames/frame_0001.jpg …` and the
-count is set by `FRAME_COUNT` in `app/tokens.ts`.
+The hero canvas reads JPEG frames from `public/frames/frame_0001.jpg …`. The
+frame count is published at build time in `public/frames/manifest.json` and read
+by the client at runtime (with `FRAME_COUNT` in `app/tokens.ts` as a fallback).
 
-On `dev`/`build` the project generates **120 placeholder frames** (a stylized
-orbit → exploded-view of the watch) so the scrub works out of the box. The
-generator **skips if `public/frames/` is already populated**, so it never
-clobbers real frames. Force a regenerate with:
+On `dev`/`build`, `scripts/build-frames.mjs` runs automatically and provides the
+frames in this order of precedence:
 
-```bash
-npm run frames       # node scripts/generate-frames.mjs --force (uses sharp)
-```
+1. **Already populated** — if `public/frames/` has frames, it does nothing.
+2. **Real Higgsfield video** — if a hero video URL is available (the `url` field
+   of `hero-source.json`, or the `HERO_VIDEO_URL` env var), it downloads the
+   video and extracts frames with ffmpeg at `fps=24, scale=1920:-1` — the Step 2
+   pipeline. This is what runs on Vercel, where the network can reach the asset
+   CDN, so **production serves the real video frames**.
+3. **Placeholder** — otherwise it generates a stylized orbit → exploded-view
+   (`scripts/generate-frames.mjs`, uses sharp) so the scrub always works.
 
-To **deploy real frames** (e.g. on Vercel), commit them explicitly past the
-gitignore: `git add -f public/frames public/hero.mp4`.
+The generated assets (`public/frames/`, `public/hero.mp4`) are git-ignored — they
+are produced at build time. Force-regenerate placeholders with `npm run frames`.
+
+> Environments that block egress to the asset CDN (e.g. a locked-down sandbox)
+> fall back to placeholders locally; the real frames still appear on Vercel.
 
 ### Using a real Higgsfield hero video
 
