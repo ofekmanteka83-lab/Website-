@@ -7,6 +7,8 @@ import { tokens, labelStyle, FRAME_COUNT } from "../tokens";
 const framePath = (i: number) =>
   `/frames/frame_${String(i + 1).padStart(4, "0")}.jpg`;
 
+const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+
 export default function ScrollHero() {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -30,7 +32,12 @@ export default function ScrollHero() {
       const images: HTMLImageElement[] = new Array(frameCount);
       let currentIdx = -1;
 
-      // Cover-fit draw: fill black, then scale image to cover and center it.
+      const isReady = (img?: HTMLImageElement) =>
+        !!img && img.complete && img.naturalWidth > 0;
+
+      // Fit: cover on landscape (full-bleed), contain on portrait so the whole
+      // exploded composition stays visible. On black, contain's letterbox is
+      // invisible.
       const draw = (idx: number) => {
         const img = images[idx];
         const dpr = window.devicePixelRatio || 1;
@@ -40,15 +47,24 @@ export default function ScrollHero() {
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, cw, ch);
 
-        if (!img || !img.complete || !img.naturalWidth) return;
+        if (!isReady(img)) return;
 
         const iw = img.naturalWidth;
         const ih = img.naturalHeight;
-        const scale = Math.max(cw / iw, ch / ih);
+        const canvasAspect = cw / ch;
+        const imgAspect = iw / ih;
+        const scale =
+          canvasAspect < imgAspect
+            ? Math.min(cw / iw, ch / ih) // narrower than the frame → contain
+            : Math.max(cw / iw, ch / ih); // wider/equal → cover
+
         const dw = iw * scale;
         const dh = ih * scale;
         const dx = (cw - dw) / 2;
         const dy = (ch - dh) / 2;
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
         ctx.drawImage(img, dx, dy, dw, dh);
         currentIdx = idx;
       };
@@ -71,6 +87,7 @@ export default function ScrollHero() {
       let firstDrawn = false;
       for (let i = 0; i < frameCount; i++) {
         const img = new Image();
+        img.decoding = "async";
         img.src = framePath(i);
         images[i] = img;
         if (i === 0) {
@@ -83,14 +100,21 @@ export default function ScrollHero() {
         }
       }
 
-      // rAF loop — no scroll event listener.
+      // rAF loop — no scroll event listener. A smoothed (eased) value trails the
+      // raw scroll progress for a weighted, cinematic scrub.
+      let displayed = -1;
       const tick = () => {
         const top = container.getBoundingClientRect().top;
         const scrollable = container.offsetHeight - window.innerHeight;
         const progress =
-          scrollable > 0 ? Math.max(0, Math.min(1, -top / scrollable)) : 0;
-        const target = Math.round(progress * (frameCount - 1));
-        if (target !== currentIdx && images[target]) {
+          scrollable > 0 ? clamp(-top / scrollable, 0, 1) : 0;
+
+        if (displayed < 0) displayed = progress; // initialise without a jump
+        displayed += (progress - displayed) * 0.1; // momentum / easing
+        if (Math.abs(progress - displayed) < 0.0006) displayed = progress;
+
+        const target = Math.round(displayed * (frameCount - 1));
+        if (target !== currentIdx && isReady(images[target])) {
           draw(target);
         }
         rafId = requestAnimationFrame(tick);
@@ -103,7 +127,11 @@ export default function ScrollHero() {
         else if (firstDrawn) draw(0);
       };
       window.addEventListener("resize", onResize);
-      cleanupResize = () => window.removeEventListener("resize", onResize);
+      window.addEventListener("orientationchange", onResize);
+      cleanupResize = () => {
+        window.removeEventListener("resize", onResize);
+        window.removeEventListener("orientationchange", onResize);
+      };
     };
 
     // Frame count comes from the build-time manifest; fall back to the constant.
@@ -129,13 +157,13 @@ export default function ScrollHero() {
   } as const;
 
   return (
-    <div ref={containerRef} style={{ height: "300vh", position: "relative" }}>
+    <div ref={containerRef} style={{ height: "400vh", position: "relative" }}>
       <div
         style={{
           position: "sticky",
           top: 0,
-          width: "100vw",
-          height: "100vh",
+          width: "100%",
+          height: "100svh",
           overflow: "hidden",
           background: tokens.bg,
         }}
@@ -154,13 +182,15 @@ export default function ScrollHero() {
             flexDirection: "column",
             justifyContent: "flex-end",
             background:
-              "linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.35) 50%, transparent 100%)",
+              "linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.45) 42%, rgba(0,0,0,0) 100%)",
             pointerEvents: "none",
           }}
         >
           <div
             style={{
               padding: "clamp(1.5rem, 5vw, 4.5rem)",
+              paddingBottom: "max(clamp(1.5rem, 5vw, 4.5rem), env(safe-area-inset-bottom))",
+              width: "100%",
               maxWidth: 760,
             }}
           >
@@ -199,7 +229,7 @@ export default function ScrollHero() {
               style={{
                 fontFamily: tokens.fontBody,
                 fontWeight: 300,
-                fontSize: "1.05rem",
+                fontSize: "clamp(0.95rem, 2.6vw, 1.05rem)",
                 lineHeight: 1.6,
                 color: tokens.textBody,
                 maxWidth: 460,

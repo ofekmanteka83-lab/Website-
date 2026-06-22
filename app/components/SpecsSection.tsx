@@ -66,6 +66,7 @@ export default function SpecsSection() {
             <motion.div
               key={label}
               variants={item}
+              className="spec-row"
               style={{
                 display: "grid",
                 gridTemplateColumns: "1fr 1.4fr",
